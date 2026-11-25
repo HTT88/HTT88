@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mixed-Signal Timing Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: instrument-panel workbench — source editor on the left, live "scope" preview on the right. */
+:root {
+  --bg: #e9edf1; --panel: #ffffff; --ink: #16202a; --muted: #5a6676; --line: #d3dae2;
+  --accent: #0b7a68; --accent-ink: #ffffff; --warn: #b3401a; --code-bg: #f6f8fa;
+  --font-ui: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0d1217; --panel: #151c23; --ink: #e2e8ee; --muted: #8b97a6; --line: #27313c;
+  --accent: #3cc4a9; --accent-ink: #062a23; --warn: #ff8d5f; --code-bg: #10161c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0d1217; --panel: #151c23; --ink: #e2e8ee; --muted: #8b97a6; --line: #27313c;
+  --accent: #3cc4a9; --accent-ink: #062a23; --warn: #ff8d5f; --code-bg: #10161c; color-scheme: dark }
+* { box-sizing: border-box }
+html, body { height: 100% }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px 16px; display: flex; flex-direction: column; gap: 12px }
+header.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0 }
+.brand h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: .01em }
+.brand span { color: var(--muted); font-size: 12.5px }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+button, select { font: 500 13px var(--font-ui); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 10px; cursor: pointer }
+button:hover, select:hover { border-color: var(--accent) }
+button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+.sep { width: 1px; height: 22px; background: var(--line) }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 12px }
+.pane { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; min-height: 0; display: flex; flex-direction: column }
+.tabs { display: flex; border-bottom: 1px solid var(--line) }
+.tabs button { border: 0; border-radius: 0; background: none; padding: 9px 14px; color: var(--muted); border-bottom: 2px solid transparent }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent) }
+.tabs .spacer { flex: 1 }
+.tabs label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; padding-right: 10px }
+.editor { flex: 1; min-height: 0; display: flex; background: var(--code-bg); border-radius: 0 0 8px 8px; overflow: hidden }
+.gutter { font: 12.5px/1.6 var(--font-mono); color: var(--muted); text-align: right; padding: 10px 6px 10px 8px; user-select: none;
+  overflow: hidden; white-space: pre; min-width: 38px; opacity: .75 }
+.gutter .err { color: var(--warn); font-weight: 600; opacity: 1 }
+textarea#src { flex: 1; min-width: 0; resize: none; border: 0; background: transparent; color: var(--ink);
+  font: 12.5px/1.6 var(--font-mono); padding: 10px 10px 10px 4px; white-space: pre; overflow: auto; tab-size: 2 }
+textarea#src:focus { outline: none }
+#errors { font: 12px/1.5 var(--font-mono); color: var(--warn); border-top: 1px solid var(--line); padding: 6px 10px; max-height: 90px; overflow: auto }
+#errors:empty { display: none }
+.ref { flex: 1; overflow: auto; padding: 4px 16px 16px; font-size: 13px }
+.ref h3 { font-size: 13px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted) }
+.ref pre, .ref code { font-family: var(--font-mono); font-size: 12px; background: var(--code-bg); border-radius: 4px }
+.ref code { padding: 1px 4px }
+.ref pre { padding: 8px 10px; overflow-x: auto; margin: 6px 0; border: 1px solid var(--line) }
+.ref table { border-collapse: collapse; width: 100%; font-size: 12.5px }
+.ref td { border-top: 1px solid var(--line); padding: 5px 6px 5px 0; vertical-align: top }
+.ref td:first-child { white-space: nowrap; font-family: var(--font-mono); font-size: 12px }
+.preview-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap }
+.preview-head .status { font-size: 12px; color: var(--muted); margin-right: auto; font-variant-numeric: tabular-nums }
+.stage { flex: 1; min-height: 0; overflow: auto; position: relative; padding: 12px }
+.stage.fit svg { width: 100%; height: auto }
+#diagram svg { display: block; border-radius: 4px; box-shadow: 0 0 0 1px var(--line) }
+#tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; font: 11.5px/1.45 var(--font-mono); box-shadow: 0 4px 14px rgba(0,0,0,.14); white-space: pre; z-index: 5;
+  font-variant-numeric: tabular-nums }
+#toast { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--panel); padding: 7px 14px; border-radius: 6px; font-size: 13px; z-index: 20 }
+@media (max-width: 860px) {
+  body { height: auto }
+  main { grid-template-columns: 1fr }
+  .pane.left { height: 60vh }
+  .pane.right { min-height: 70vh }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><h1>Mixed-Signal Timing Studio</h1><span>Analog waveforms + derived digital timing, from text</span></div>
+  <div class="tools">
+    <select id="example" aria-label="Load example">
+      <option value="">Load example…</option>
+    </select>
+    <button id="openBtn" title="Open a saved .txt source">Open</button>
+    <input id="openFile" type="file" accept=".txt,.td,.tdl,text/plain" hidden>
+    <button id="saveSrc" title="Save the source text">Save source</button>
+    <span class="sep"></span>
+    <button id="copySvg">Copy SVG</button>
+    <button id="dlSvg">Export SVG</button>
+    <button id="dlPng" class="primary">Export PNG</button>
+  </div>
+</header>
+
+<main>
+  <section class="pane left">
+    <div class="tabs" role="tablist">
+      <button id="tabSrc" role="tab" aria-selected="true">Source</button>
+      <button id="tabRef" role="tab" aria-selected="false">Syntax reference</button>
+      <span class="spacer"></span>
+    </div>
+    <div id="srcView" class="editor-wrap" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="editor">
+        <div class="gutter" id="gutter">1</div>
+        <textarea id="src" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Diagram source"></textarea>
+      </div>
+      <div id="errors"></div>
+    </div>
+    <div id="refView" class="ref" hidden>
+      <h3>Statements</h3>
+      <table>
+        <tr><td>title Text</td><td>Diagram title.</td></tr>
+        <tr><td>time 0 10 ms</td><td>Visible time window and unit label.</td></tr>
+        <tr><td>ticks 1</td><td>Axis tick spacing (auto if omitted).</td></tr>
+        <tr><td>width 960</td><td>Plot width in pixels.</td></tr>
+        <tr><td>group "Supplies"</td><td>Section header row.</td></tr>
+        <tr><td>gap</td><td>Empty spacer row.</td></tr>
+        <tr><td>analog NAME = …</td><td>Analog waveform (point list or expression).</td></tr>
+        <tr><td>digital NAME = …</td><td>Digital signal (edge list or expression).</td></tr>
+        <tr><td>bus NAME = …</td><td>Multi-value bus / state (list or <code>sel</code>/<code>pick</code>).</td></tr>
+        <tr><td>level SIG 1.8 "V_TH"</td><td>Dashed threshold line on an analog row.</td></tr>
+        <tr><td>marker EVENT "text"</td><td>Vertical line through all rows.</td></tr>
+        <tr><td>region EV1 EV2 "text"</td><td>Shaded time band.</td></tr>
+        <tr><td>span EV1 EV2 "t_RST={dt}"</td><td>Dimension arrow; <code>{dt}</code> prints the measured time.</td></tr>
+        <tr><td>arrow EV1 EV2 "text"</td><td>Cause→effect arrow between edges.</td></tr>
+      </table>
+      <p>Options go after a <code>;</code> — e.g. <code>; label="V_{DD}" range=0:3.6 unit=V color=#d9480f h=90 hide</code>. For span: <code>row=SIG</code>. Comments start with <code>#</code>.</p>
+
+      <h3>Point lists</h3>
+<pre>analog VDD = 0:0 1:0 3:3.3@rc 6:3.3 8:0@s
+digital en = 0:0 2:1 5:x 6:z 7:0
+bus mode  = 0:OFF 2:INIT 4:"RUN A" 8:x</pre>
+      <p>Analog segment shape goes on the end point: <code>@lin</code> (default), <code>@rc</code> or <code>@rc0.3</code> (RC with τ), <code>@s</code> (smooth S), <code>@step</code>. Two points at the same time make a vertical jump. Digital values: <code>0 1 x z</code>.</p>
+
+      <h3>Expressions</h3>
+      <table>
+        <tr><td>VDD &gt; 1.8</td><td>Comparator → digital.</td></tr>
+        <tr><td>thr(VDD, 2.4, 2.1)</td><td>Comparator with hysteresis (rise, fall thresholds).</td></tr>
+        <tr><td>a &amp; b, a | b, a ^ b, !a</td><td>Logic (X-aware).</td></tr>
+        <tr><td>delay(d, tr, tf)</td><td>Delay rising edges by tr, falling by tf (inertial).</td></tr>
+        <tr><td>deglitch(d, tmin)</td><td>Drop pulses shorter than tmin.</td></tr>
+        <tr><td>valid(d, cond)</td><td>d where cond=1, X elsewhere (e.g. logic unpowered).</td></tr>
+        <tr><td>sr(set, reset)</td><td>Set/reset latch (reset dominant).</td></tr>
+        <tr><td>clock(period, en, duty)</td><td>Clock running while en=1.</td></tr>
+        <tr><td>pulse(t, w)</td><td>Single pulse.</td></tr>
+        <tr><td>follow(d, lo, hi, tr, tf, rc|lin|s)</td><td>Analog that ramps between lo/hi following d (regulator, bias…).</td></tr>
+        <tr><td>min, max, clamp(a, lo, hi)</td><td>Analog combining; also + − * /.</td></tr>
+        <tr><td>ripple(a, amp, period)</td><td>Add sine ripple.</td></tr>
+        <tr><td>noise(a, amp)</td><td>Add repeatable noise.</td></tr>
+        <tr><td>sel(d, "LO", "HI")</td><td>Bus text from a digital.</td></tr>
+        <tr><td>pick(c1,"A", c2,"B", "ELSE")</td><td>Bus: first true condition wins.</td></tr>
+      </table>
+
+      <h3>Events</h3>
+      <p><code>2.5</code> · <code>por_n.rise</code> · <code>clk.rise[3]</code> · <code>rst_n.fall</code> · <code>sig.edge</code> · <code>VDD.up(1.8)</code> · <code>VDD.down(1.6)</code> · <code>VDD.cross(1)</code> · <code>mode.is(RUN)</code> · add an offset: <code>por_n.rise+0.5</code></p>
+
+      <h3>Label formatting</h3>
+      <p><code>V_{DD}</code> subscript, <code>x^{2}</code> superscript, <code>~{RST}</code> overline (active-low).</p>
+    </div>
+  </section>
+
+  <section class="pane right">
+    <div class="preview-head">
+      <span class="status" id="status">—</span>
+      <label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center">Diagram
+        <select id="dtheme" aria-label="Diagram colors"><option value="light">Paper</option><option value="dark">Scope (dark)</option></select>
+      </label>
+      <label style="font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center">
+        <input type="checkbox" id="fit" checked> Fit width</label>
+    </div>
+    <div class="stage fit" id="stage">
+      <div id="diagram"></div>
+      <div id="tip" hidden></div>
+    </div>
+  </section>
+</main>
+<div id="toast" hidden></div>
+
+<script>
+"use strict";
+/* ======================================================================
+   Examples
+   ====================================================================== */
+const EXAMPLES = {
+"Power-on reset & brown-out": `title Power-On Reset and Brown-Out Sequence
+time 0 10 ms
+ticks 1
+
+group "Supplies"
+analog VDD = 0:0 0.4:0 2.6:3.3@rc 5.4:3.3 5.7:1.8@s 6.2:1.8 6.6:3.3@rc 8.8:3.3 9.8:0@s ; label="V_{DD}" range=0:3.6 unit=V h=100
+level VDD 2.4 "V_{POR,R}"
+level VDD 2.1 "V_{POR,F}"
+analog VCORE = min(follow(ldo_en, 0, 1.2, 0.45, 0.12, rc), VDD) ; label="V_{CORE} (LDO)" range=0:1.4 unit=V color=#0b7285
+level VCORE 1.08 "90 %"
+
+group "Reset & control"
+digital por_ok = thr(VDD, 2.4, 2.1) ; label="POR comparator"
+digital por_n  = valid(delay(por_ok, 0.35, 0), VDD > 0.9) ; label="~{POR}"
+digital ldo_en = por_n ; hide
+digital vcore_ok = thr(VCORE, 1.08, 1.0) ; label="VCORE_OK"
+digital rst_n  = valid(delay(por_n & vcore_ok, 0.5, 0), VDD > 0.9) ; label="~{RST} (to core)"
+digital clk    = clock(0.08, rst_n & por_n) ; label="CLK_SYS"
+bus     state  = pick(!por_n, "POR", !rst_n, "RESET", "ACTIVE") ; label="Chip state"
+
+span VDD.up(2.4) por_n.rise "t_{POR} = {dt}" ; row=por_n
+span vcore_ok.rise rst_n.rise "t_{RST} = {dt}" ; row=rst_n
+arrow por_n.rise VCORE.up(0.6) "LDO enabled"
+region VDD.down(2.1) VDD.up(2.4)[2]+0.35 "Brown-out"
+marker VDD.up(2.4) "V_{DD} > V_{POR,R}"
+`,
+"Mode change (sleep / wake, DVFS)": `title Mode Change: ACTIVE → SLEEP → ACTIVE
+time 0 20 us
+ticks 2
+
+digital sleep_req = 0:0 3:1 12:0 ; label="SLEEP_REQ"
+digital clk_en   = delay(!sleep_req, 0, 0.4) & pll_lock ; label="CLK_EN"
+digital clk      = clock(0.25, clk_en) ; label="CLK_CORE"
+digital vsel     = delay(!sleep_req, 0, 1.0) ; label="VSEL (1=1.1 V)"
+analog  VCORE    = follow(vsel, 0.75, 1.1, 2.0, 1.5, lin) ; label="V_{CORE}" range=0.6:1.2 unit=V
+level VCORE 1.08 "V_{OK,R}"
+level VCORE 1.05 "V_{OK,F}"
+digital vcore_ok = thr(VCORE, 1.08, 1.05) ; label="VCORE_OK"
+digital pll_en   = delay(vcore_ok, 0.2, 0) ; label="PLL_EN"
+digital pll_lock = delay(pll_en, 1.5, 0) ; label="PLL_LOCK"
+bus     mode     = pick(clk_en, "ACTIVE", sleep_req & !vsel, "SLEEP", sleep_req, "ENTER", "WAKE") ; label="MODE"
+
+span sleep_req.rise clk_en.fall "{dt}" ; row=clk_en
+span pll_en.rise pll_lock.rise "t_{LOCK} = {dt}" ; row=pll_lock
+span sleep_req.fall clk_en.rise "t_{WAKE} = {dt}" ; row=mode
+arrow sleep_req.fall vsel.rise
+arrow vcore_ok.rise pll_en.rise
+marker sleep_req.rise "Sleep request"
+marker sleep_req.fall "Wake-up IRQ"
+`,
+"Noisy supply, hysteresis & deglitch": `title Brown-Out Detector on a Noisy Battery
+time 0 40 ms
+ticks 5
+
+analog vbat_clean = 0:3.7 5:3.7 13:3.11@s 18:3.07@s 23:2.9@s 28:3.09@s 31:3.13 36:3.6@s ; hide
+analog VBAT = noise(ripple(vbat_clean, 0.015, 0.9), 0.04) ; label="V_{BAT}" range=2.8:3.8 unit=V h=110
+level VBAT 3.1 "V_{BOR}"
+level VBAT 3.0 "V_{BOR} − hyst"
+digital cmp_raw = VBAT > 3.1 ; label="Comparator, no hysteresis"
+digital cmp_hys = thr(VBAT, 3.1, 3.0) ; label="With 100 mV hysteresis"
+digital bor_n   = delay(deglitch(cmp_hys, 0.5), 2, 0.2) ; label="~{BOR} (deglitched)"
+bus     action  = sel(bor_n, "SAVE STATE / HOLD", "RUN") ; label="Firmware"
+region bor_n.fall bor_n.rise "Brown-out: firmware holds state"
+span cmp_hys.rise bor_n.rise "{dt}" ; row=bor_n
+`,
+"Quick start": `title Quick Start
+time 0 10 us
+ticks 1
+
+analog VIN = 0:0 1:0 3:1.8@s 7:1.8 9:0@rc ; range=0:2 unit=V
+level VIN 0.9 "V_{TH}"
+digital vin_ok = VIN > 0.9
+digital en     = delay(vin_ok, 1, 0) ; color=#7048e8
+digital clk    = clock(0.4, en)
+bus     state  = sel(en, "IDLE", "RUN")
+digital manual = 0:0 1:1 3:x 4:0 6:z 8:1 ; label="hand-drawn"
+marker vin_ok.rise "VIN > V_{TH}"
+span vin_ok.rise en.rise "{dt}" ; row=en
+`
+};
+
+/* ======================================================================
+   Small helpers
+   ====================================================================== */
+const $ = s => document.querySelector(s);
+const NUM = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?`;
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function fmt(x) {
+  if (!isFinite(x)) return String(x);
+  const a = Math.abs(x);
+  if (a !== 0 && (a < 1e-3 || a >= 1e5)) return x.toExponential(2);
+  return String(+x.toPrecision(4));
+}
+class SrcErr extends Error {}
+const fail = m => { throw new SrcErr(m); };
+
+function stripComment(line) {
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') q = !q;
+    if (q) continue;
+    const startOk = i === 0 || /\s/.test(line[i - 1]);
+    if (c === "#" && startOk) return line.slice(0, i);
+    if (c === "/" && line[i + 1] === "/" && startOk) return line.slice(0, i);
+  }
+  return line;
+}
+function splitOpts(line) {
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') q = !q;
+    else if (!q && line[i] === ";") return [line.slice(0, i), line.slice(i + 1)];
+  }
+  return [line, ""];
+}
+function parseOpts(s) {
+  const o = {}; const re = /([A-Za-z_][\w-]*)(?:\s*=\s*(?:"([^"]*)"|(\S+)))?/g; let m;
+  while ((m = re.exec(s))) o[m[1].toLowerCase()] = m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : true;
+  return o;
+}
+function words(s) {
+  const out = []; const re = /"([^"]*)"|(\S+)/g; let m;
+  while ((m = re.exec(s))) out.push(m[1] !== undefined ? { q: true, v: m[1] } : { q: false, v: m[2] });
+  return out;
+}
+
+/* ======================================================================
+   Signal model
+   analog : {type:'analog', f(t), bp:[t...]}
+   digital: {type:'dig', init:'0'|'1'|'x'|'z', edges:[{t,v}]}
+   bus    : {type:'bus', init:string, edges:[{t,v}]}
+   ====================================================================== */
+let T0 = 0, T1 = 10;
+
+const constA = v => ({ type: "analog", f: () => v, bp: [] });
+const constD = v => ({ type: "dig", init: v, edges: [] });
+
+function normalize(sig) {
+  const e = sig.edges.filter(x => isFinite(x.t)).map((x, i) => ({ ...x, i })).sort((a, b) => a.t - b.t || a.i - b.i);
+  const out = []; let cur = sig.init;
+  // initial value is the value at T0 (edges at or before T0 fold into init)
+  for (const x of e) {
+    if (x.t <= T0) { cur = x.v; continue; }
+    if (out.length && out[out.length - 1].t === x.t) out.pop();
+    const prev = out.length ? out[out.length - 1].v : cur;
+    if (x.v !== prev) out.push({ t: x.t, v: x.v });
+  }
+  // after popping same-time edges, re-check redundancy
+  const clean = []; let p = cur;
+  for (const x of out) { if (x.v !== p) { clean.push(x); p = x.v; } }
+  return { ...sig, init: cur, edges: clean };
+}
+function valueAt(sig, t) {
+  const e = sig.edges; let lo = 0, hi = e.length - 1, ans = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (e[m].t <= t) { ans = m; lo = m + 1; } else hi = m - 1; }
+  return ans < 0 ? sig.init : e[ans].v;
+}
+function combine(sigs, fn, type = "dig") {
+  const times = [...new Set(sigs.flatMap(s => s.edges.map(e => e.t)))].sort((a, b) => a - b);
+  const init = fn(...sigs.map(s => s.init));
+  const edges = times.map(t => ({ t, v: fn(...sigs.map(s => valueAt(s, t))) }));
+  return normalize({ type, init, edges });
+}
+const L_AND = (a, b) => (a === "0" || b === "0") ? "0" : (a === "1" && b === "1") ? "1" : "x";
+const L_OR = (a, b) => (a === "1" || b === "1") ? "1" : (a === "0" && b === "0") ? "0" : "x";
+const L_XOR = (a, b) => (a === "0" || a === "1") && (b === "0" || b === "1") ? (a !== b ? "1" : "0") : "x";
+const L_NOT = a => a === "1" ? "0" : a === "0" ? "1" : "x";
+
+function sampleTimes(bp, n = 4000) {
+  const ts = []; for (let i = 0; i <= n; i++) ts.push(T0 + (T1 - T0) * i / n);
+  for (const b of bp) if (b > T0 && b < T1) { ts.push(b); ts.push(Math.min(T1, b + 1e-9 * (T1 - T0))); }
+  return ts.sort((a, b) => a - b);
+}
+function crossings(a, level, dir) { // dir: 1 up, -1 down, 0 both
+  const ts = sampleTimes(a.bp); const out = [];
+  let pt = ts[0], pv = a.f(pt);
+  for (let i = 1; i < ts.length; i++) {
+    const t = ts[i], v = a.f(t);
+    const up = pv < level && v >= level, dn = pv >= level && v < level;
+    if ((up && dir >= 0) || (dn && dir <= 0)) out.push(v === pv ? t : pt + (t - pt) * (level - pv) / (v - pv));
+    pt = t; pv = v;
+  }
+  return out;
+}
+function hystComp(a, vr, vf) {
+  if (vf > vr) [vr, vf] = [vf, vr];
+  const ts = sampleTimes(a.bp);
+  let pt = ts[0], pv = a.f(pt);
+  const init = pv >= vr ? "1" : "0"; let st = init; const edges = [];
+  for (let i = 1; i < ts.length; i++) {
+    const t = ts[i], v = a.f(t);
+    if (st === "0" && v >= vr) { edges.push({ t: v === pv ? t : pt + (t - pt) * (vr - pv) / (v - pv), v: "1" }); st = "1"; }
+    else if (st === "1" && v < vf) { edges.push({ t: v === pv ? t : pt + (t - pt) * (vf - pv) / (v - pv), v: "0" }); st = "0"; }
+    pt = t; pv = v;
+  }
+  return normalize({ type: "dig", init, edges });
+}
+function delaySig(d, tr, tf) {
+  const out = [];
+  for (const e of d.edges) {
+    const dt = e.v === "1" ? tr : e.v === "0" ? tf : Math.min(tr, tf);
+    const nt = e.t + dt;
+    while (out.length && out[out.length - 1].t >= nt) out.pop();
+    out.push({ t: nt, v: e.v });
+  }
+  return normalize({ type: d.type, init: d.init, edges: out });
+}
+function deglitch(d, tmin) {
+  let e = d.edges.slice(), changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i + 1 < e.length; i++) if (e[i + 1].t - e[i].t < tmin) { e.splice(i, 2); changed = true; break; }
+    const n = normalize({ ...d, edges: e }); e = n.edges;
+  }
+  return normalize({ ...d, edges: e });
+}
+function windows(d, val) {
+  const out = []; let cur = d.init, start = T0;
+  const pts = [...d.edges, { t: T1, v: "__end" }];
+  for (const e of pts) {
+    if (cur === val && e.t > start) out.push([start, Math.min(e.t, T1)]);
+    cur = e.v; start = e.t;
+  }
+  return out;
+}
+function clockSig(period, en, duty, phase) {
+  if (!(period > 0)) fail("clock period must be > 0");
+  const edges = []; let budget = 40000;
+  for (const v of ["1", "x"]) {
+    for (const [a, b] of windows(en, v)) {
+      if (v === "x") { edges.push({ t: a, v: "x" }, { t: b, v: "0" }); continue; }
+      for (let t = a + phase; t < b && budget-- > 0; t += period) {
+        edges.push({ t, v: "1" });
+        edges.push({ t: Math.min(t + duty * period, b), v: "0" });
+      }
+      edges.push({ t: b, v: "0" });
+    }
+  }
+  edges.sort((p, q) => p.t - q.t);
+  const init = edges.length && edges[0].t <= T0 ? edges[0].v : "0";
+  return normalize({ type: "dig", init, edges });
+}
+function followSig(d, lo, hi, tr, tf, shape) {
+  const span = Math.abs(hi - lo) || 1;
+  const target = v => v === "1" ? hi : v === "0" ? lo : null;
+  const segs = []; let v0 = target(d.init); if (v0 === null) v0 = lo;
+  let tgt = v0;
+  const evalSeg = (s, t) => {
+    const dt = Math.max(0, t - s.t0); const up = s.tg >= s.v0; const T = up ? tr : tf;
+    if (s.tg === s.v0 || T <= 0) return s.tg;
+    if (shape === "lin") { const step = span / T * dt; return up ? Math.min(s.tg, s.v0 + step) : Math.max(s.tg, s.v0 - step); }
+    if (shape === "s") { const dur = T * Math.abs(s.tg - s.v0) / span; const u = Math.min(1, dt / dur); return s.v0 + (s.tg - s.v0) * (1 - Math.cos(Math.PI * u)) / 2; }
+    return s.tg + (s.v0 - s.tg) * Math.exp(-dt / (T / 3));
+  };
+  segs.push({ t0: T0, v0, tg: tgt });
+  const bp = [];
+  for (const e of d.edges) {
+    const cur = segs[segs.length - 1]; const vNow = evalSeg(cur, e.t);
+    const tg = target(e.v); const s = { t0: e.t, v0: vNow, tg: tg === null ? vNow : tg };
+    segs.push(s); bp.push(e.t);
+    if (shape !== "rc") { const T = s.tg >= vNow ? tr : tf; bp.push(e.t + T * Math.abs(s.tg - vNow) / span); }
+  }
+  const f = t => { let lo2 = 0, hi2 = segs.length - 1; while (lo2 < hi2) { const m = (lo2 + hi2 + 1) >> 1; if (segs[m].t0 <= t) lo2 = m; else hi2 = m - 1; } return evalSeg(segs[lo2], t); };
+  return { type: "analog", f, bp };
+}
+function hashNoise(i, seed) { let x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453; return (x - Math.floor(x)) * 2 - 1; }
+
+/* ---------- literal lists ---------- */
+function literalAnalog(body) {
+  const re = new RegExp(`(${NUM})\\s*:\\s*(${NUM})(?:@(lin|rc|s|step)(${NUM})?)?`, "g");
+  const pts = []; let m; let rest = body;
+  while ((m = re.exec(body))) pts.push({ t: +m[1], v: +m[2], shape: (m[3] || "lin").toLowerCase(), p: m[4] !== undefined ? +m[4] : null });
+  rest = body.replace(re, "").replace(/[\s,]/g, "");
+  if (rest) fail(`can't read "${rest.slice(0, 20)}" in point list (use time:value, e.g. 2.5:3.3@rc)`);
+  if (!pts.length) fail("empty point list");
+  for (let i = 1; i < pts.length; i++) if (pts[i].t < pts[i - 1].t) fail(`times must not go backwards (${pts[i].t} after ${pts[i - 1].t})`);
+  const f = t => {
+    const n = pts.length;
+    if (t < pts[0].t) return pts[0].v;
+    if (t >= pts[n - 1].t) return pts[n - 1].v;
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const m2 = (lo + hi) >> 1; if (pts[m2].t <= t) lo = m2; else hi = m2; }
+    const a = pts[lo], b = pts[hi]; const T = b.t - a.t; if (T <= 0) return b.v;
+    const u = (t - a.t) / T;
+    switch (b.shape) {
+      case "s": return a.v + (b.v - a.v) * (1 - Math.cos(Math.PI * u)) / 2;
+      case "step": return a.v;
+      case "rc": { const k = T / (b.p || T / 4); return a.v + (b.v - a.v) * (1 - Math.exp(-k * u)) / (1 - Math.exp(-k)); }
+      default: return a.v + (b.v - a.v) * u;
+    }
+  };
+  return { type: "analog", f, bp: pts.map(p => p.t) };
+}
+function literalEdges(body, kind) {
+  const re = kind === "dig"
+    ? new RegExp(`(${NUM})\\s*:\\s*([01xXzZhHlL])(?![\\w.])`, "g")
+    : new RegExp(`(${NUM})\\s*:\\s*(?:"([^"]*)"|([^\\s,]+))`, "g");
+  const pts = []; let m;
+  while ((m = re.exec(body))) {
+    let v = kind === "dig" ? m[2].toLowerCase() : (m[2] !== undefined ? m[2] : m[3]);
+    if (kind === "dig") v = v === "h" ? "1" : v === "l" ? "0" : v;
+    pts.push({ t: +m[1], v });
+  }
+  const rest = body.replace(re, "").replace(/[\s,]/g, "");
+  if (rest) fail(`can't read "${rest.slice(0, 20)}" (use time:value${kind === "dig" ? " with value 0/1/x/z" : ""})`);
+  if (!pts.length) fail("empty list");
+  const init = pts[0].t <= T0 ? pts[0].v : (kind === "dig" ? "x" : "x");
+  return normalize({ type: kind, init, edges: pts });
+}
+
+/* ---------- expression parser ---------- */
+function tokenize(s) {
+  const re = new RegExp(`\\s*(?:(${NUM.replace("[-+]?", "")})|([A-Za-z_]\\w*)|"([^"]*)"|(>=|<=|&&|\\|\\||[(),&|^!~<>+\\-*/]))`, "y");
+  const out = []; let m; re.lastIndex = 0;
+  while (re.lastIndex < s.length) {
+    const at = re.lastIndex;
+    if (/^\s*$/.test(s.slice(at))) break;
+    m = re.exec(s);
+    if (!m) fail(`unexpected "${s.slice(at).trim().slice(0, 12)}"`);
+    if (m[1] !== undefined) out.push({ k: "num", v: +m[1] });
+    else if (m[2] !== undefined) {
+      const w = m[2].toLowerCase();
+      if (w === "and") out.push({ k: "op", v: "&" }); else if (w === "or") out.push({ k: "op", v: "|" });
+      else if (w === "not") out.push({ k: "op", v: "!" }); else out.push({ k: "id", v: m[2] });
+    }
+    else if (m[3] !== undefined) out.push({ k: "str", v: m[3] });
+    else out.push({ k: "op", v: m[4] === "&&" ? "&" : m[4] === "||" ? "|" : m[4] === "~" ? "!" : m[4] });
+  }
+  return out;
+}
+function parseExpr(src) {
+  const tk = tokenize(src); let i = 0;
+  const peek = () => tk[i], isOp = v => tk[i] && tk[i].k === "op" && tk[i].v === v;
+  const expect = v => { if (!isOp(v)) fail(`expected "${v}"`); i++; };
+  const bin = (next, ops) => () => { let a = next(); while (tk[i] && tk[i].k === "op" && ops.includes(tk[i].v)) { const op = tk[i++].v; a = { k: "bin", op, a, b: next() }; } return a; };
+  let pOr;
+  const primary = () => {
+    const t = peek(); if (!t) fail("expression ends too early");
+    if (t.k === "num") { i++; return { k: "num", v: t.v }; }
+    if (t.k === "str") { i++; return { k: "str", v: t.v }; }
+    if (t.k === "id") {
+      i++;
+      if (isOp("(")) { i++; const args = []; if (!isOp(")")) { args.push(pOr()); while (isOp(",")) { i++; args.push(pOr()); } } expect(")"); return { k: "call", fn: t.v, args }; }
+      return { k: "id", name: t.v };
+    }
+    if (isOp("(")) { i++; const e = pOr(); expect(")"); return e; }
+    fail(`unexpected "${t.v}"`);
+  };
+  const unary = () => { if (isOp("!") || isOp("-")) { const op = tk[i++].v; return { k: "un", op, a: unary() }; } return primary(); };
+  const mul = bin(unary, ["*", "/"]); const add = bin(mul, ["+", "-"]);
+  const cmp = bin(add, [">", "<", ">=", "<="]); const and = bin(cmp, ["&"]); const xor = bin(and, ["^"]);
+  pOr = bin(xor, ["|"]);
+  const e = pOr(); if (i < tk.length) fail(`unexpected "${tk[i].v}"`); return e;
+}
+
+/* ---------- evaluation ---------- */
+const SHAPES = ["lin", "rc", "s", "step"];
+function makeEvaluator(model) {
+  const cache = new Map(), visiting = new Set();
+  const asNum = (x, what) => { if (x.type !== "num") fail(`${what} must be a number`); return x.v; };
+  const asA = x => x.type === "num" ? constA(x.v) : x.type === "analog" ? x : fail(x.type === "dig" ? "a digital signal was used where an analog one is needed (use follow())" : "expected an analog signal");
+  const asD = x => x.type === "num" ? constD(x.v ? "1" : "0") : x.type === "dig" ? x : fail(x.type === "analog" ? "an analog signal was used as logic — compare it first, e.g. VDD > 1.2 or thr(VDD, 1.8, 1.6)" : "expected a digital signal");
+  const asS = x => x.type === "str" ? x.v : x.type === "num" ? String(x.v) : fail("expected text in quotes");
+  const opA = (a, b, fn) => { const A = asA(a), B = asA(b); return { type: "analog", f: t => fn(A.f(t), B.f(t)), bp: [...A.bp, ...B.bp] }; };
+  const argc = (args, n, m, name) => { if (args.length < n || args.length > m) fail(`${name}() takes ${n === m ? n : n + "–" + m} arguments`); };
+
+  const B = {
+    thr(a) { argc(a, 2, 3, "thr"); return hystComp(asA(a[0]), asNum(a[1], "threshold"), a[2] ? asNum(a[2], "threshold") : asNum(a[1], "threshold")); },
+    delay(a) { argc(a, 2, 3, "delay"); const d = a[0].type === "bus" ? a[0] : asD(a[0]); const tr = asNum(a[1], "delay"); return delaySig(d, tr, a[2] ? asNum(a[2], "delay") : tr); },
+    deglitch(a) { argc(a, 2, 2, "deglitch"); return deglitch(asD(a[0]), asNum(a[1], "tmin")); },
+    valid(a) { argc(a, 2, 2, "valid"); return combine([asD(a[0]), asD(a[1])], (v, c) => c === "1" ? v : "x"); },
+    sr(a) {
+      argc(a, 2, 3, "sr"); const s = asD(a[0]), r = asD(a[1]);
+      const times = [...new Set([...s.edges, ...r.edges].map(e => e.t))].sort((p, q) => p - q);
+      const step = (st, sv, rv) => rv === "1" ? "0" : sv === "1" ? "1" : st;
+      const init = step(a[2] ? (asNum(a[2], "init") ? "1" : "0") : "0", s.init, r.init); let st = init; const edges = [];
+      for (const t of times) { st = step(st, valueAt(s, t), valueAt(r, t)); edges.push({ t, v: st }); }
+      return normalize({ type: "dig", init, edges });
+    },
+    clock(a) { argc(a, 1, 4, "clock"); return clockSig(asNum(a[0], "period"), a[1] ? asD(a[1]) : constD("1"), a[2] ? asNum(a[2], "duty") : 0.5, a[3] ? asNum(a[3], "phase") : 0); },
+    pulse(a) { argc(a, 2, 2, "pulse"); const t = asNum(a[0], "time"), w = asNum(a[1], "width"); return normalize({ type: "dig", init: "0", edges: [{ t, v: "1" }, { t: t + w, v: "0" }] }); },
+    follow(a) {
+      argc(a, 4, 6, "follow"); const tr = asNum(a[3], "rise time");
+      let tf = tr, shape = "rc";
+      if (a[4]) { if (a[4].type === "str") shape = a[4].v; else tf = asNum(a[4], "fall time"); }
+      if (a[5]) shape = asS(a[5]);
+      if (!["rc", "lin", "s"].includes(shape)) fail("follow() shape must be rc, lin or s");
+      return followSig(asD(a[0]), asNum(a[1], "low level"), asNum(a[2], "high level"), tr, tf, shape);
+    },
+    min(a) { if (a.length < 2) fail("min() needs 2+ arguments"); return a.slice(1).reduce((p, q) => opA(p, q, Math.min), a[0]); },
+    max(a) { if (a.length < 2) fail("max() needs 2+ arguments"); return a.slice(1).reduce((p, q) => opA(p, q, Math.max), a[0]); },
+    clamp(a) { argc(a, 3, 3, "clamp"); return opA(opA(a[0], a[1], Math.max), a[2], Math.min); },
+    ripple(a) { argc(a, 3, 3, "ripple"); const A = asA(a[0]), amp = asNum(a[1], "amplitude"), per = asNum(a[2], "period"); return { type: "analog", f: t => A.f(t) + amp * Math.sin(2 * Math.PI * t / per), bp: A.bp }; },
+    noise(a) {
+      argc(a, 2, 3, "noise"); const A = asA(a[0]), amp = asNum(a[1], "amplitude"); const seed = a[2] ? asNum(a[2], "seed") : 1;
+      const dt = (T1 - T0) / 600;
+      return { type: "analog", f: t => { const x = (t - T0) / dt, i = Math.floor(x), u = x - i; const s = u * u * (3 - 2 * u); return A.f(t) + amp * (hashNoise(i, seed) * (1 - s) + hashNoise(i + 1, seed) * s); }, bp: A.bp };
+    },
+    sel(a) { argc(a, 3, 4, "sel"); const lo = asS(a[1]), hi = asS(a[2]), xx = a[3] ? asS(a[3]) : "x"; return combine([asD(a[0])], v => v === "1" ? hi : v === "0" ? lo : xx, "bus"); },
+    pick(a) {
+      if (a.length < 3 || a.length % 2 === 0) fail('pick(cond1, "A", cond2, "B", …, "DEFAULT") needs pairs plus a default');
+      const conds = [], labels = [];
+      for (let k = 0; k + 1 < a.length; k += 2) { conds.push(asD(a[k])); labels.push(asS(a[k + 1])); }
+      const dflt = asS(a[a.length - 1]);
+      return combine(conds, (...vs) => { for (let k = 0; k < vs.length; k++) { if (vs[k] === "1") return labels[k]; if (vs[k] !== "0") return "x"; } return dflt; }, "bus");
+    },
+    and(a) { return a.map(asD).reduce((p, q) => combine([p, q], L_AND)); },
+    or(a) { return a.map(asD).reduce((p, q) => combine([p, q], L_OR)); },
+    not(a) { argc(a, 1, 1, "not"); return combine([asD(a[0])], L_NOT); },
+    abs(a) { argc(a, 1, 1, "abs"); const A = asA(a[0]); return { type: "analog", f: t => Math.abs(A.f(t)), bp: A.bp }; },
+  };
+
+  function ev(n) {
+    switch (n.k) {
+      case "num": return { type: "num", v: n.v };
+      case "str": return { type: "str", v: n.v };
+      case "id":
+        if (model.signals.has(n.name)) return get(n.name);
+        if (SHAPES.includes(n.name)) return { type: "str", v: n.name };
+        return fail(`unknown signal "${n.name}"`);
+      case "un": {
+        const a = ev(n.a);
+        if (n.op === "-") return a.type === "num" ? { type: "num", v: -a.v } : opA(constA(0), a, (p, q) => p - q);
+        return a.type === "bus" ? fail("can't invert a bus") : combine([asD(a)], L_NOT);
+      }
+      case "bin": {
+        const a = ev(n.a), b = ev(n.b);
+        const ar = { "+": (p, q) => p + q, "-": (p, q) => p - q, "*": (p, q) => p * q, "/": (p, q) => p / q }[n.op];
+        if (ar) return a.type === "num" && b.type === "num" ? { type: "num", v: ar(a.v, b.v) } : opA(a, b, ar);
+        if ([">", ">=", "<", "<="].includes(n.op)) {
+          const diff = opA(a, b, (p, q) => p - q); const d = hystComp(diff, 0, 0);
+          return n.op[0] === ">" ? d : combine([d], L_NOT);
+        }
+        const fn = { "&": L_AND, "|": L_OR, "^": L_XOR }[n.op];
+        return combine([asD(a), asD(b)], fn);
+      }
+      case "call": {
+        const f = B[n.fn.toLowerCase()]; if (!f) fail(`unknown function ${n.fn}()`);
+        return f(n.args.map(ev));
+      }
+    }
+  }
+  function get(name) {
+    if (cache.has(name)) return cache.get(name);
+    const def = model.signals.get(name);
+    if (visiting.has(name)) fail(`"${name}" depends on itself`);
+    visiting.add(name);
+    try {
+      let r;
+      if (def.literal) r = def.kind === "analog" ? literalAnalog(def.body) : literalEdges(def.body, def.kind === "bus" ? "bus" : "dig");
+      else r = ev(parseExpr(def.body));
+      if (def.kind === "analog") r = asA(r);
+      else if (def.kind === "digital") { if (r.type === "bus") fail("this expression makes a bus; declare it with 'bus'"); r = asD(r); }
+      else if (def.kind === "bus") { if (r.type === "dig") r = { ...r, type: "bus" }; else if (r.type !== "bus") fail("bus needs a list like 0:IDLE 2:RUN or sel()/pick()"); }
+      cache.set(name, r); return r;
+    } catch (e) {
+      if (!(e instanceof SrcErr)) throw e;
+      if (!e.at) { e.at = def.line; e.message = `${name}: ${e.message}`; }
+      throw e;
+    } finally { visiting.delete(name); }
+  }
+  return { get };
+}
+
+/* ---------- document parser ---------- */
+function parseDoc(text) {
+  const model = { title: "", t0: 0, t1: 10, unit: "", ticks: null, width: 960, signals: new Map(), order: [], levels: [], markers: [], regions: [], spans: [], arrows: [], errors: [] };
+  const lines = text.split(/\r?\n/);
+  lines.forEach((raw, idx) => {
+    const ln = idx + 1;
+    const line = stripComment(raw).trim(); if (!line) return;
+    try {
+      const [head, optStr] = splitOpts(line); const opts = parseOpts(optStr);
+      const sm = head.match(/^(analog|digital|bus)\s+([A-Za-z_]\w*)\s*(?:"([^"]*)")?\s*=\s*(.+)$/i);
+      if (sm) {
+        const [, kind, name, lab, body] = sm;
+        if (model.signals.has(name)) fail(`"${name}" is defined twice`);
+        const literal = new RegExp(`^\\s*${NUM}\\s*:`).test(body);
+        model.signals.set(name, { kind: kind.toLowerCase(), name, label: opts.label ?? lab ?? name, body: body.trim(), literal, opts, line: ln });
+        if (!opts.hide) model.order.push({ type: "signal", name });
+        return;
+      }
+      const w = words(head); const kw = w[0].v.toLowerCase(); const rest = w.slice(1);
+      const txt = rest.filter(x => x.q).map(x => x.v)[0];
+      const plain = rest.filter(x => !x.q).map(x => x.v);
+      switch (kw) {
+        case "title": model.title = head.slice(5).trim().replace(/^"|"$/g, ""); break;
+        case "time":
+          if (plain.length < 2 || isNaN(+plain[0]) || isNaN(+plain[1]) || +plain[1] <= +plain[0]) fail("use: time START END [unit], with END > START");
+          model.t0 = +plain[0]; model.t1 = +plain[1]; model.unit = plain[2] || ""; break;
+        case "ticks": if (!(+plain[0] > 0)) fail("ticks needs a positive step"); model.ticks = +plain[0]; break;
+        case "width": if (!(+plain[0] >= 200)) fail("width must be ≥ 200"); model.width = Math.min(6000, +plain[0]); break;
+        case "group": model.order.push({ type: "group", text: txt ?? plain.join(" ") }); break;
+        case "gap": model.order.push({ type: "gap", h: +plain[0] || 14 }); break;
+        case "level":
+          if (plain.length < 2 || isNaN(+plain[1])) fail('use: level SIGNAL VALUE "label"');
+          model.levels.push({ sig: plain[0], v: +plain[1], label: txt ?? "", opts, line: ln }); break;
+        case "marker":
+          if (!plain[0]) fail('use: marker EVENT "label"');
+          model.markers.push({ ev: plain[0], label: txt ?? "", opts, line: ln }); break;
+        case "region": case "span": case "arrow":
+          if (plain.length < 2) fail(`use: ${kw} EVENT1 EVENT2 "label"`);
+          model[kw === "region" ? "regions" : kw === "span" ? "spans" : "arrows"].push({ a: plain[0], b: plain[1], label: txt ?? "", opts, line: ln }); break;
+        default: fail(`unknown statement "${w[0].v}" (expected analog, digital, bus, level, marker, span, region, arrow, group, time…)`);
+      }
+    } catch (e) { if (e instanceof SrcErr) model.errors.push({ line: ln, msg: e.message }); else throw e; }
+  });
+  return model;
+}
+
+function resolveEvent(str, evalr, model) {
+  const m = str.match(new RegExp(`^([A-Za-z_]\\w*)\\.(rise|fall|edge|change|up|down|cross|is)(?:\\(([^)]*)\\))?(?:\\[(\\d+)\\])?\\s*(?:([-+])\\s*(${NUM.replace("[-+]?", "")}))?$`, "i"));
+  if (!m) { if (!isNaN(+str)) return { t: +str, sig: null }; fail(`can't read event "${str}" — use a time, sig.rise, sig.fall[2], VDD.up(1.8), mode.is(RUN)…`); }
+  const [, name, kindRaw, param, nth, sgn, off] = m; const kind = kindRaw.toLowerCase();
+  if (!model.signals.has(name)) fail(`unknown signal "${name}"`);
+  const s = evalr.get(name); const n = (+nth || 1) - 1; let times;
+  if (s.type === "analog") {
+    if (!["up", "down", "cross"].includes(kind)) fail(`${name} is analog — use ${name}.up(V), .down(V) or .cross(V)`);
+    if (param === undefined || isNaN(+param)) fail(`${name}.${kind}() needs a voltage, e.g. ${name}.${kind}(1.8)`);
+    times = crossings(s, +param, kind === "up" ? 1 : kind === "down" ? -1 : 0);
+  } else {
+    if (kind === "rise") times = s.edges.filter(e => e.v === "1").map(e => e.t);
+    else if (kind === "fall") times = s.edges.filter(e => e.v === "0").map(e => e.t);
+    else if (kind === "is") times = s.edges.filter(e => e.v === param).map(e => e.t);
+    else if (kind === "edge" || kind === "change") times = s.edges.map(e => e.t);
+    else fail(`.${kind} is for analog signals; use .rise, .fall or .edge`);
+  }
+  if (n >= times.length) fail(`${str}: no such event in the time window`);
+  return { t: times[n] + (off ? (sgn === "-" ? -1 : 1) * +off : 0), sig: name };
+}
+
+/* ======================================================================
+   Rendering (SVG)
+   ====================================================================== */
+const THEMES = {
+  light: { bg: "#ffffff", text: "#1b2430", muted: "#6a7482", grid: "#edf0f4", gridMajor: "#dde2e8", rowLine: "#e3e7ec", dig: "#1d4f8a", digFill: "rgba(29,79,138,.07)",
+    x: "#c2412d", xFill: "rgba(194,65,45,.10)", z: "#8a6d00", bus: "#334155", busFill: "#f3f5f8", marker: "#7b8794", region: "rgba(232,89,12,.08)", regionText: "#b04a10",
+    span: "#3d4a5c", arrow: "#7048e8", level: "#9aa4b1", group: "#0b7a68", analog: ["#d9480f", "#0b7285", "#7048e8", "#2b8a3e", "#c2255c", "#e67700"] },
+  dark: { bg: "#0f151b", text: "#e1e7ee", muted: "#8a96a5", grid: "#18212a", gridMajor: "#222d38", rowLine: "#1f2832", dig: "#7cc4ff", digFill: "rgba(124,196,255,.08)",
+    x: "#ff7a66", xFill: "rgba(255,122,102,.13)", z: "#e7c65a", bus: "#c7d2de", busFill: "#17212b", marker: "#6f7d8c", region: "rgba(255,146,76,.10)", regionText: "#ffa36b",
+    span: "#b9c4d0", arrow: "#b197fc", level: "#6b7886", group: "#3cc4a9", analog: ["#ff8a4c", "#3bc9db", "#b197fc", "#69db7c", "#f783ac", "#ffd43b"] }
+};
+const FONT = "Helvetica Neue, Helvetica, Arial, sans-serif";
+const MONO = "Menlo, Consolas, DejaVu Sans Mono, monospace";
+const plainLen = s => String(s).replace(/[_^~]\{([^}]*)\}/g, "$1").length;
+function rich(s) {
+  return esc(s).replace(/([_^~])\{([^}]*)\}/g, (_, k, inner) =>
+    k === "_" ? `<tspan baseline-shift="sub" font-size="75%">${inner}</tspan>` :
+    k === "^" ? `<tspan baseline-shift="super" font-size="75%">${inner}</tspan>` :
+    `<tspan text-decoration="overline">${inner}</tspan>`);
+}
+function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw))); const f = raw / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+
+function render(model, themeName) {
+  const th = THEMES[themeName]; T0 = model.t0; T1 = model.t1;
+  const evalr = makeEvaluator(model); const errors = model.errors.slice();
+  const catchErr = (line, fn) => { try { return fn(); } catch (e) { if (e instanceof SrcErr) { errors.push({ line: e.at || line, msg: e.message }); return null; } throw e; } };
+
+  // evaluate all signals (hidden ones too, so errors surface)
+  const sigs = new Map();
+  for (const [name, def] of model.signals) { const s = catchErr(def.line, () => evalr.get(name)); if (s) sigs.set(name, s); }
+  const ev = (str, line) => catchErr(line, () => resolveEvent(str, evalr, model));
+
+  // rows
+  const rows = []; let aIdx = 0;
+  for (const it of model.order) {
+    if (it.type === "group") { rows.push({ kind: "group", text: it.text, h: 24, lanes: [] }); continue; }
+    if (it.type === "gap") { rows.push({ kind: "gap", h: it.h, lanes: [] }); continue; }
+    const def = model.signals.get(it.name), s = sigs.get(it.name);
+    const kind = def.kind;
+    const h = +def.opts.h || (kind === "analog" ? 86 : kind === "bus" ? 28 : 30);
+    const color = def.opts.color || (kind === "analog" ? th.analog[aIdx++ % th.analog.length] : kind === "digital" ? th.dig : th.bus);
+    rows.push({ kind, name: it.name, label: def.label, sig: s, h, color, def, lanes: [] });
+  }
+  const rowOf = name => rows.find(r => r.name === name);
+
+  // resolve annotations
+  const spans = [];
+  for (const sp of model.spans) {
+    const a = ev(sp.a, sp.line), b = ev(sp.b, sp.line); if (!a || !b) continue;
+    let row = sp.opts.row ? rowOf(sp.opts.row) : (rowOf(b.sig) || rowOf(a.sig));
+    if (sp.opts.row && !row) { errors.push({ line: sp.line, msg: `span row "${sp.opts.row}" is not a visible signal` }); continue; }
+    if (!row) row = [...rows].reverse().find(r => r.sig);
+    if (!row) continue;
+    const dt = Math.abs(b.t - a.t);
+    const label = (sp.label || "{dt}").replace(/\{dt\}/g, fmt(dt) + (model.unit ? " " + model.unit : ""));
+    const o = { a: a.t, b: b.t, label }; row.lanes.push(o); spans.push(o);
+  }
+  const markers = model.markers.map(m => { const e = ev(m.ev, m.line); return e && { t: e.t, label: m.label, color: m.opts.color }; }).filter(Boolean);
+  const regions = model.regions.map(r => { const a = ev(r.a, r.line), b = ev(r.b, r.line); return a && b && { a: Math.min(a.t, b.t), b: Math.max(a.t, b.t), label: r.label, color: r.opts.color }; }).filter(Boolean);
+  const arrows = model.arrows.map(r => { const a = ev(r.a, r.line), b = ev(r.b, r.line); return a && b && { a, b, label: r.label }; }).filter(Boolean);
+  const levels = [];
+  for (const lv of model.levels) {
+    const r = rowOf(lv.sig);
+    if (!model.signals.has(lv.sig)) { errors.push({ line: lv.line, msg: `level: unknown signal "${lv.sig}"` }); continue; }
+    if (model.signals.get(lv.sig).kind !== "analog") { errors.push({ line: lv.line, msg: `level: "${lv.sig}" is not analog` }); continue; }
+    if (r) levels.push({ row: r, v: lv.v, label: lv.label });
+  }
+
+  // geometry
+  const pad = 16, fs = 12;
+  const labelW = Math.max(96, ...rows.filter(r => r.label).map(r => plainLen(r.label) * 7.1 + 30), ...rows.filter(r => r.kind === "group").map(r => plainLen(r.text) * 6.4 + 8));
+  const unitOf = r => r.def && r.def.opts.unit ? String(r.def.opts.unit) : "";
+  const levelText = l => `${l.label ? l.label + " " : ""}${fmt(l.v)}${unitOf(l.row) ? " " + unitOf(l.row) : ""}`;
+  const rightW = Math.max(24, ...levels.map(l => plainLen(levelText(l)) * 6.2 + 14));
+  const plotX = pad + labelW, plotW = model.width, W = plotX + plotW + rightW;
+  const X = t => plotX + (t - T0) / (T1 - T0) * plotW;
+  let y = pad;
+  const titleY = model.title ? y + 14 : 0; if (model.title) y += 28;
+
+  // marker/region label lanes
+  const heads = [...regions.filter(r => r.label).map(r => ({ x: X(r.a) + 4, w: plainLen(r.label) * 6.3, item: r, kind: "region" })),
+                 ...markers.filter(m => m.label).map(m => ({ x: X(m.t) - plainLen(m.label) * 3.15, w: plainLen(m.label) * 6.3, item: m, kind: "marker" }))].sort((a, b) => a.x - b.x);
+  const laneEnds = [];
+  for (const h of heads) { let l = laneEnds.findIndex(e => e + 8 < h.x); if (l < 0) { l = laneEnds.length; laneEnds.push(0); } laneEnds[l] = h.x + h.w; h.lane = l; }
+  const headTop = y; y += laneEnds.length * 15 + (laneEnds.length ? 4 : 0);
+  const rowsTop = y;
+  for (const r of rows) {
+    r.y = y; r.lanes.sort((p, q) => Math.min(p.a, p.b) - Math.min(q.a, q.b));
+    // span sub-lanes so overlapping spans stack
+    const ends = [];
+    for (const s of r.lanes) { const x0 = X(Math.min(s.a, s.b)), x1 = Math.max(X(Math.max(s.a, s.b)), x0 + plainLen(s.label) * 6.3 + 10); let l = ends.findIndex(e => e + 6 < x0); if (l < 0) { l = ends.length; ends.push(0); } ends[l] = x1; s.lane = l; }
+    r.annH = ends.length ? ends.length * 20 + 2 : 0;
+    y += r.h + r.annH + (r.kind === "group" ? 0 : 6);
+  }
+  const rowsBottom = y; const axisY = rowsBottom + 4; const H = axisY + 34;
+
+  const o = [];
+  o.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(W)}" height="${Math.ceil(H)}" viewBox="0 0 ${Math.ceil(W)} ${Math.ceil(H)}" font-family="${FONT}" font-size="${fs}">`);
+  o.push(`<defs><pattern id="hx" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="${th.xFill}"/><line x1="0" y1="0" x2="0" y2="6" stroke="${th.x}" stroke-width="1.2" opacity=".55"/></pattern>`
+    + `<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="${th.arrow}"/></marker>`
+    + `<marker id="sh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="${th.span}"/></marker>`
+    + `<clipPath id="plot"><rect x="${plotX - 1}" y="0" width="${plotW + 2}" height="${H}"/></clipPath></defs>`);
+  o.push(`<rect width="100%" height="100%" fill="${th.bg}"/>`);
+  if (model.title) o.push(`<text x="${pad}" y="${titleY}" font-size="15" font-weight="600" fill="${th.text}">${rich(model.title)}</text>`);
+
+  // grid + ticks
+  const step = model.ticks || niceStep((T1 - T0) / Math.max(2, plotW / 90));
+  const ticks = []; for (let t = Math.ceil(T0 / step - 1e-9) * step; t <= T1 + 1e-9 * (T1 - T0); t += step) ticks.push(+t.toPrecision(12));
+  const minor = step / 5; const showMinor = plotW / ((T1 - T0) / minor) > 6;
+  if (showMinor) for (let t = Math.ceil(T0 / minor) * minor; t <= T1; t += minor) o.push(`<line x1="${X(t)}" x2="${X(t)}" y1="${rowsTop}" y2="${rowsBottom}" stroke="${th.grid}"/>`);
+  for (const t of ticks) o.push(`<line x1="${X(t)}" x2="${X(t)}" y1="${rowsTop}" y2="${rowsBottom}" stroke="${th.gridMajor}"/>`);
+
+  // regions
+  for (const r of regions) {
+    o.push(`<rect x="${X(r.a)}" y="${headTop}" width="${Math.max(1, X(r.b) - X(r.a))}" height="${rowsBottom - headTop}" fill="${r.color || th.region}" clip-path="url(#plot)"/>`);
+  }
+  for (const h of heads) {
+    const ly = headTop + 11 + h.lane * 15;
+    o.push(`<text x="${h.x}" y="${ly}" font-size="11" fill="${h.kind === "region" ? th.regionText : (h.item.color || th.text)}">${rich(h.item.label)}</text>`);
+  }
+
+  // rows
+  for (const r of rows) {
+    if (r.kind === "group") {
+      o.push(`<text x="${pad}" y="${r.y + 16}" font-size="11" font-weight="700" letter-spacing=".08em" fill="${th.group}">${rich(String(r.text).toUpperCase())}</text>`);
+      o.push(`<line x1="${pad + plainLen(r.text) * 7.4 + 10}" x2="${plotX + plotW}" y1="${r.y + 12}" y2="${r.y + 12}" stroke="${th.rowLine}"/>`);
+      continue;
+    }
+    if (r.kind === "gap") continue;
+    const top = r.y, h = r.h, mid = top + h / 2;
+    o.push(`<text x="${plotX - 12}" y="${r.kind === "analog" ? mid + 4 : mid + 4}" text-anchor="end" font-size="12.5" fill="${th.text}" font-weight="500">${rich(r.label)}</text>`);
+    if (!r.sig) { o.push(`<text x="${plotX + 8}" y="${mid + 4}" fill="${th.x}" font-size="11">error — see source</text>`); continue; }
+    if (r.kind === "analog") drawAnalog(o, r, th, X, plotX, plotW, levels.filter(l => l.row === r), levelText);
+    else if (r.kind === "digital") drawDigital(o, r, th, X);
+    else drawBus(o, r, th, X);
+  }
+
+  // markers
+  for (const m of markers) {
+    const x = X(m.t); if (x < plotX - 0.5 || x > plotX + plotW + 0.5) continue;
+    o.push(`<line x1="${x}" x2="${x}" y1="${headTop + (laneEnds.length ? 0 : 0)}" y2="${rowsBottom}" stroke="${m.color || th.marker}" stroke-dasharray="4 3"/>`);
+  }
+  // spans
+  for (const r of rows) for (const s of r.lanes) {
+    const yy = r.y + r.h + 13 + s.lane * 20; const x0 = X(Math.min(s.a, s.b)), x1 = X(Math.max(s.a, s.b));
+    o.push(`<line x1="${x0}" x2="${x0}" y1="${yy - 9}" y2="${yy + 4}" stroke="${th.span}"/><line x1="${x1}" x2="${x1}" y1="${yy - 9}" y2="${yy + 4}" stroke="${th.span}"/>`);
+    const wide = x1 - x0 > 14;
+    if (wide) o.push(`<line x1="${x0 + 1}" x2="${x1 - 1}" y1="${yy}" y2="${yy}" stroke="${th.span}" marker-start="url(#sh)" marker-end="url(#sh)"/>`);
+    else o.push(`<line x1="${x0 - 12}" x2="${x0}" y1="${yy}" y2="${yy}" stroke="${th.span}" marker-end="url(#sh)"/><line x1="${x1 + 12}" x2="${x1}" y1="${yy}" y2="${yy}" stroke="${th.span}" marker-end="url(#sh)"/>`);
+    const tw = plainLen(s.label) * 6.3;
+    const fits = x1 - x0 > tw + 8;
+    const tx = fits ? (x0 + x1) / 2 : x1 + (wide ? 6 : 16);
+    o.push(`<text x="${tx}" y="${yy - 3}" text-anchor="${fits ? "middle" : "start"}" font-size="11" fill="${th.span}" style="paint-order:stroke" stroke="${th.bg}" stroke-width="3">${rich(s.label)}</text>`);
+  }
+  // arrows
+  const anchorY = (e) => { const r = rowOf(e.sig); if (!r) return null; if (r.kind === "analog" && r.yOf) { const s = r.sig; return r.yOf(s.f(e.t)); } return r.y + r.h / 2; };
+  for (const a of arrows) {
+    const y1 = anchorY(a.a), y2 = anchorY(a.b); if (y1 === null || y2 === null) continue;
+    const x1 = X(a.a.t), x2 = X(a.b.t); const dx = Math.abs(x2 - x1) * 0.5;
+    const curve = Math.abs(x2 - x1) < 50
+      ? `C${x1 + 22},${y1 + (y2 - y1) * 0.25} ${x2 + 22},${y2 - (y2 - y1) * 0.25} ${x2},${y2}`
+      : `C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+    o.push(`<circle cx="${x1}" cy="${y1}" r="2.6" fill="${th.arrow}"/>`);
+    o.push(`<path d="M${x1},${y1} ${curve}" fill="none" stroke="${th.arrow}" stroke-width="1.3" marker-end="url(#ah)"/>`);
+    if (a.label) o.push(`<text x="${(x1 + x2) / 2 + 4}" y="${(y1 + y2) / 2 - 4}" font-size="11" fill="${th.arrow}" style="paint-order:stroke" stroke="${th.bg}" stroke-width="3">${rich(a.label)}</text>`);
+  }
+  // axis
+  o.push(`<line x1="${plotX}" x2="${plotX + plotW}" y1="${axisY}" y2="${axisY}" stroke="${th.muted}"/>`);
+  for (const t of ticks) o.push(`<line x1="${X(t)}" x2="${X(t)}" y1="${axisY}" y2="${axisY + 5}" stroke="${th.muted}"/><text x="${X(t)}" y="${axisY + 18}" text-anchor="middle" font-size="11" fill="${th.muted}" font-family="${MONO}">${fmt(t)}</text>`);
+  o.push(`<text x="${plotX - 12}" y="${axisY + 18}" text-anchor="end" font-size="11" fill="${th.muted}">t${model.unit ? " (" + esc(model.unit) + ")" : ""}</text>`);
+  o.push(`<g id="hover" style="display:none"><line id="hvline" x1="0" x2="0" y1="${headTop}" y2="${axisY}" stroke="${th.text}" stroke-opacity=".45" stroke-width="1"/></g>`);
+  o.push(`</svg>`);
+  return { svg: o.join(""), errors, layout: { plotX, plotW, rows, X, unit: model.unit } };
+}
+
+function drawDigital(o, r, th, X) {
+  const yH = r.y + 5, yL = r.y + r.h - 5, yM = (yH + yL) / 2; const s = r.sig;
+  const segs = []; let cur = s.init, t0 = T0;
+  for (const e of s.edges) { if (e.t >= T1) break; segs.push({ a: t0, b: e.t, v: cur }); cur = e.v; t0 = e.t; }
+  segs.push({ a: t0, b: T1, v: cur });
+  const yOf = v => v === "1" ? yH : v === "0" ? yL : yM;
+  let d = "", fill = "";
+  segs.forEach((g, i) => {
+    const x0 = X(g.a), x1 = X(g.b);
+    if (g.v === "x") {
+      o.push(`<rect x="${x0}" y="${yH}" width="${Math.max(0.5, x1 - x0)}" height="${yL - yH}" fill="url(#hx)"/>`);
+      o.push(`<path d="M${x0},${yH}H${x1}M${x0},${yL}H${x1}" stroke="${th.x}" stroke-width="1.3" fill="none"/>`);
+    } else if (g.v === "z") {
+      o.push(`<line x1="${x0}" x2="${x1}" y1="${yM}" y2="${yM}" stroke="${th.z}" stroke-width="1.6"/>`);
+    } else {
+      d += `M${x0},${yOf(g.v)}H${x1}`;
+      if (g.v === "1") fill += `<rect x="${x0}" y="${yH}" width="${x1 - x0}" height="${yL - yH}" fill="${r.def.opts.color ? r.color : th.digFill}" ${r.def.opts.color ? 'fill-opacity=".1"' : ""}/>`;
+    }
+    if (i > 0) {
+      const p = segs[i - 1].v; const ya = (p === "x" || g.v === "x") ? yH : yOf(p), yb = (p === "x" || g.v === "x") ? yL : yOf(g.v);
+      d += `M${x0},${ya}V${yb}`;
+    }
+  });
+  o.push(fill);
+  o.push(`<path d="${d}" stroke="${r.color}" stroke-width="1.6" fill="none" stroke-linejoin="round"/>`);
+}
+function drawBus(o, r, th, X) {
+  const yT = r.y + 4, yB = r.y + r.h - 4, yM = (yT + yB) / 2; const s = r.sig;
+  const segs = []; let cur = s.init, t0 = T0;
+  for (const e of s.edges) { if (e.t >= T1) break; segs.push({ a: t0, b: e.t, v: cur }); cur = e.v; t0 = e.t; }
+  segs.push({ a: t0, b: T1, v: cur });
+  for (const g of segs) {
+    const x0 = X(g.a), x1 = X(g.b), w = x1 - x0; const k = Math.min(4, w / 2);
+    const unk = g.v === "x" || g.v === "X" || g.v === "";
+    if (g.v === "z" || g.v === "Z") { o.push(`<line x1="${x0}" x2="${x1}" y1="${yM}" y2="${yM}" stroke="${th.z}" stroke-width="1.6"/>`); continue; }
+    const lft = g.a <= T0 ? `M${x0},${yT}` : `M${x0},${yM}L${x0 + k},${yT}`;
+    const rgt = g.b >= T1 ? `L${x1},${yT}L${x1},${yB}` : `L${x1 - k},${yT}L${x1},${yM}L${x1 - k},${yB}`;
+    const bot = g.a <= T0 ? `L${x0},${yB}` : `L${x0 + k},${yB}Z`;
+    o.push(`<path d="${lft}${rgt}${bot}" fill="${unk ? "url(#hx)" : th.busFill}" stroke="${unk ? th.x : r.color}" stroke-width="1.2" stroke-linejoin="round"/>`);
+    if (!unk) {
+      const tw = String(g.v).length * 6.6;
+      if (w > tw + 10) o.push(`<text x="${(x0 + x1) / 2}" y="${yM + 4}" text-anchor="middle" font-size="11.5" font-family="${MONO}" fill="${th.text}">${esc(g.v)}</text>`);
+      else if (w > 22) { const n = Math.max(1, Math.floor((w - 12) / 6.6)); o.push(`<text x="${(x0 + x1) / 2}" y="${yM + 4}" text-anchor="middle" font-size="11.5" font-family="${MONO}" fill="${th.text}">${esc(String(g.v).slice(0, n))}…</text>`); }
+    }
+  }
+}
+function drawAnalog(o, r, th, X, plotX, plotW, levels, levelText) {
+  const s = r.sig; const N = Math.ceil(plotW * 1.5);
+  const ts = []; for (let i = 0; i <= N; i++) ts.push(T0 + (T1 - T0) * i / N);
+  for (const b of s.bp) if (b > T0 && b < T1) ts.push(b, b + 1e-9 * (T1 - T0));
+  ts.sort((a, b) => a - b);
+  const vs = ts.map(t => s.f(t));
+  let lo, hi;
+  const rg = r.def.opts.range;
+  if (rg && /:/.test(rg)) [lo, hi] = rg.split(":").map(Number);
+  if (!(isFinite(lo) && isFinite(hi) && hi > lo)) {
+    lo = Math.min(0, ...vs, ...levels.map(l => l.v)); hi = Math.max(...vs, ...levels.map(l => l.v));
+    if (hi === lo) hi = lo + 1; const p = (hi - lo) * 0.08; hi += p; if (lo < 0) lo -= p;
+  }
+  const yT = r.y + 4, yB = r.y + r.h - 4;
+  const yOf = v => yT + (hi - Math.max(lo - (hi - lo) * .03, Math.min(hi + (hi - lo) * .03, v))) / (hi - lo) * (yB - yT);
+  r.yOf = yOf; r.range = [lo, hi];
+  const unit = r.def.opts.unit ? String(r.def.opts.unit) : "";
+  o.push(`<line x1="${plotX}" x2="${plotX + plotW}" y1="${yB}" y2="${yB}" stroke="${th.rowLine}"/>`);
+  o.push(`<line x1="${plotX}" x2="${plotX + plotW}" y1="${yT}" y2="${yT}" stroke="${th.rowLine}" stroke-dasharray="2 3"/>`);
+  o.push(`<text x="${plotX - 5}" y="${yT + 8}" text-anchor="end" font-size="9.5" fill="${th.muted}" font-family="${MONO}">${fmt(hi)}${esc(unit)}</text>`);
+  o.push(`<text x="${plotX - 5}" y="${yB}" text-anchor="end" font-size="9.5" fill="${th.muted}" font-family="${MONO}">${fmt(lo)}${esc(unit)}</text>`);
+  const placed = levels.map(l => ({ l, yy: yOf(l.v), ty: yOf(l.v) })).sort((a, b) => a.yy - b.yy);
+  for (let i = 1; i < placed.length; i++) placed[i].ty = Math.max(placed[i].ty, placed[i - 1].ty + 12);
+  for (const p of placed) {
+    o.push(`<line x1="${plotX}" x2="${plotX + plotW}" y1="${p.yy}" y2="${p.yy}" stroke="${th.level}" stroke-dasharray="5 4"/>`);
+    if (Math.abs(p.ty - p.yy) > 2) o.push(`<path d="M${plotX + plotW},${p.yy}L${plotX + plotW + 4},${p.ty}" stroke="${th.level}" fill="none"/>`);
+    o.push(`<text x="${plotX + plotW + 7}" y="${p.ty + 3.5}" font-size="10.5" fill="${th.muted}">${rich(levelText(p.l))}</text>`);
+  }
+  let d = ""; for (let i = 0; i < ts.length; i++) d += (i ? "L" : "M") + X(ts[i]).toFixed(2) + "," + yOf(vs[i]).toFixed(2);
+  const base = yOf(Math.max(lo, Math.min(hi, 0)));
+  o.push(`<path d="${d}L${X(T1)},${base}L${X(T0)},${base}Z" fill="${r.color}" fill-opacity=".09" clip-path="url(#plot)"/>`);
+  o.push(`<path d="${d}" fill="none" stroke="${r.color}" stroke-width="1.8" stroke-linejoin="round" clip-path="url(#plot)"/>`);
+}
+
+/* ======================================================================
+   App
+   ====================================================================== */
+const src = $("#src"), gutter = $("#gutter"), errBox = $("#errors"), diagram = $("#diagram"), tip = $("#tip"), stage = $("#stage");
+let last = null, timer = 0;
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+
+function toast(msg) { const el = $("#toast"); el.textContent = msg; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 2200); }
+
+function updateGutter(errLines = new Set()) {
+  const n = src.value.split("\n").length; let s = "";
+  for (let i = 1; i <= n; i++) s += errLines.has(i) ? `<span class="err">${i}</span>\n` : i + "\n";
+  gutter.innerHTML = s; gutter.scrollTop = src.scrollTop;
+}
+function run() {
+  const t = performance.now();
+  let res;
+  try { const model = parseDoc(src.value); res = render(model, $("#dtheme").value); }
+  catch (e) { errBox.textContent = "Internal error: " + e.message; console.error(e); return; }
+  diagram.innerHTML = res.svg; last = res;
+  const errs = res.errors.sort((a, b) => a.line - b.line);
+  errBox.textContent = errs.map(e => `Line ${e.line}: ${e.msg}`).join("\n");
+  updateGutter(new Set(errs.map(e => e.line)));
+  const nSig = res.layout.rows.filter(r => r.sig).length;
+  $("#status").textContent = `${nSig} signal${nSig === 1 ? "" : "s"} · ${errs.length ? errs.length + " problem" + (errs.length > 1 ? "s" : "") : "no problems"} · ${(performance.now() - t).toFixed(0)} ms`;
+  store.set("tds.source", src.value);
+}
+src.addEventListener("input", () => { updateGutter(); clearTimeout(timer); timer = setTimeout(run, 180); });
+src.addEventListener("scroll", () => { gutter.scrollTop = src.scrollTop; });
+src.addEventListener("keydown", e => {
+  if (e.key === "Tab") { e.preventDefault(); const s = src.selectionStart; src.setRangeText("  ", s, src.selectionEnd, "end"); src.dispatchEvent(new Event("input")); }
+});
+$("#dtheme").addEventListener("change", () => { store.set("tds.dtheme", $("#dtheme").value); run(); });
+$("#fit").addEventListener("change", () => stage.classList.toggle("fit", $("#fit").checked));
+
+// examples
+const exSel = $("#example");
+for (const k of Object.keys(EXAMPLES)) { const op = document.createElement("option"); op.value = k; op.textContent = k; exSel.appendChild(op); }
+exSel.addEventListener("change", () => { if (!exSel.value) return; src.value = EXAMPLES[exSel.value]; exSel.value = ""; run(); });
+
+// tabs
+function tab(ref) { $("#tabSrc").setAttribute("aria-selected", !ref); $("#tabRef").setAttribute("aria-selected", ref); $("#srcView").style.display = ref ? "none" : "flex"; $("#refView").hidden = !ref; }
+$("#tabSrc").onclick = () => tab(false); $("#tabRef").onclick = () => tab(true);
+
+// hover readout
+diagram.addEventListener("mousemove", e => {
+  const svg = diagram.querySelector("svg"); if (!svg || !last) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+  const { plotX, plotW, rows, unit } = last.layout;
+  const hv = svg.querySelector("#hover");
+  if (p.x < plotX || p.x > plotX + plotW) { hv.style.display = "none"; tip.hidden = true; return; }
+  const t = T0 + (p.x - plotX) / plotW * (T1 - T0);
+  hv.style.display = ""; const ln = svg.querySelector("#hvline"); ln.setAttribute("x1", p.x); ln.setAttribute("x2", p.x);
+  const lines = [`t = ${fmt(t)} ${unit}`];
+  for (const r of rows) {
+    if (!r.sig) continue;
+    const name = String(r.label).replace(/[_^~]\{([^}]*)\}/g, "$1");
+    let v;
+    if (r.kind === "analog") v = fmt(r.sig.f(t)) + (r.def.opts.unit ? " " + r.def.opts.unit : "");
+    else { v = valueAt(r.sig, t); if (v === "x") v = "X"; else if (v === "z") v = "Z"; }
+    lines.push(`${name.padEnd(18).slice(0, 18)} ${v}`);
+  }
+  tip.textContent = lines.join("\n"); tip.hidden = false;
+  const sr = stage.getBoundingClientRect();
+  let lx = e.clientX - sr.left + stage.scrollLeft + 14, ly = e.clientY - sr.top + stage.scrollTop + 14;
+  if (lx + tip.offsetWidth > stage.scrollLeft + stage.clientWidth) lx -= tip.offsetWidth + 28;
+  tip.style.left = lx + "px"; tip.style.top = ly + "px";
+});
+diagram.addEventListener("mouseleave", () => { tip.hidden = true; const hv = diagram.querySelector("#hover"); if (hv) hv.style.display = "none"; });
+
+// export
+function svgText() {
+  const svg = diagram.querySelector("svg").cloneNode(true); svg.querySelector("#hover")?.remove();
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svg);
+}
+const fileBase = () => (src.value.match(/^\s*title\s+(.+)$/m)?.[1] || "timing").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60) || "timing";
+const dlCap = (window.claude && typeof window.claude.use === "function") ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null);
+async function saveFile(filename, data, mime) {
+  const cap = await Promise.race([dlCap, new Promise(r => setTimeout(() => r(null), 300))]);
+  if (cap) {
+    try { await cap.save({ filename, data }); toast("Saved " + filename); }
+    catch (e) { if (e && e.code !== "declined") toast("Couldn't save: " + (e.message || e.code)); }
+    return;
+  }
+  const blob = data instanceof Blob ? data : new Blob([data], { type: mime });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+$("#dlSvg").onclick = () => saveFile(fileBase() + ".svg", svgText(), "image/svg+xml");
+$("#saveSrc").onclick = () => saveFile(fileBase() + ".txt", src.value, "text/plain");
+$("#copySvg").onclick = async () => {
+  try { await navigator.clipboard.writeText(svgText()); toast("SVG copied to clipboard"); }
+  catch { toast("Clipboard not available here — use Export SVG"); }
+};
+$("#dlPng").onclick = () => {
+  const svg = diagram.querySelector("svg"); const w = +svg.getAttribute("width"), h = +svg.getAttribute("height");
+  const img = new Image(); const url = URL.createObjectURL(new Blob([svgText()], { type: "image/svg+xml" }));
+  img.onload = () => {
+    const scale = 2, c = document.createElement("canvas"); c.width = w * scale; c.height = h * scale;
+    const g = c.getContext("2d"); g.scale(scale, scale); g.drawImage(img, 0, 0); URL.revokeObjectURL(url);
+    c.toBlob(b => saveFile(fileBase() + ".png", b, "image/png"), "image/png");
+  };
+  img.onerror = () => toast("PNG export failed");
+  img.src = url;
+};
+$("#openBtn").onclick = () => $("#openFile").click();
+$("#openFile").onchange = async e => { const f = e.target.files[0]; if (!f) return; src.value = await f.text(); e.target.value = ""; run(); toast("Opened " + f.name); };
+
+// boot
+$("#dtheme").value = store.get("tds.dtheme") || "light";
+src.value = store.get("tds.source") || EXAMPLES["Power-on reset & brown-out"];
+updateGutter(); run();
+</script>
+</body>
+</html>
